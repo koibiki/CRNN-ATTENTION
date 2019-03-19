@@ -62,14 +62,14 @@ def create_dataset_from_file(root, file_path):
         img_path = root + "/" + img_name
         # if osp.exists(img_path):
         img_paths.append(img_path)
-    img_paths = img_paths[:1000000]
+    img_paths = img_paths[:10000]
     labels = [img_path.split("/")[-1].split("_")[-2] for img_path in tqdm(img_paths, desc="generator label:")]
     return img_paths, labels
 
 
 def load_dataset(root):
     img_paths_tensor, labels = create_dataset_from_file(root, root + "/annotation_train.txt")
-    print(len(labels))
+
     labels = [label for label in labels]
 
     processed_labels = [preprocess_label(label) for label in tqdm(labels, desc="process label:")]
@@ -91,7 +91,7 @@ BUFFER_SIZE = len(img_paths_tensor)
 BATCH_SIZE = 64
 N_BATCH = BUFFER_SIZE // BATCH_SIZE
 embedding_dim = 256
-units = 1024
+units = 512
 
 vocab_size = len(label_lang.word2idx)
 
@@ -109,7 +109,7 @@ def map_func(img_path_tensor, label_tensor, label):
 dataset = tf.data.Dataset.from_tensor_slices((img_paths_tensor, labels_tensor, labels)) \
     .map(lambda item1, item2, item3: tf.py_func(map_func, [item1, item2, item3], [tf.float32, tf.int32, tf.string]),
          num_parallel_calls=8) \
-    .shuffle(1000, reshuffle_each_iteration=True)
+    .shuffle(1000, reshuffle_each_iteration=True).prefetch(2)
 dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
 
 encoder = Encoder(units, BATCH_SIZE)
@@ -136,7 +136,7 @@ logdir = "./logs/"
 writer = tf.contrib.summary.create_file_writer(logdir)
 writer.set_as_default()
 
-with tf.contrib.summary.record_summaries_every_n_global_steps(1):
+with tf.contrib.summary.record_summaries_every_n_global_steps(10):
     for epoch in range(EPOCHS):
         start = time.time()
 
@@ -185,15 +185,13 @@ with tf.contrib.summary.record_summaries_every_n_global_steps(1):
 
             acc = compute_accuracy(ground_truths, preds)
 
-            tf.contrib.summary.scalar('loss', batch_loss)
-            tf.contrib.summary.scalar('accuracy', acc)
-
-            if batch % 1 == 0:
-                print('Epoch {} Batch {}/{} Loss {:.4f} Mean Loss {:.4f} acc {:f}'.format(epoch + 1, batch, N_BATCH,
-                                                                                          batch_loss.numpy(),
-                                                                                          total_loss / (batch + 1),
-                                                                                          acc))
             if batch % 10 == 0:
+                tf.contrib.summary.scalar('loss', batch_loss)
+                tf.contrib.summary.scalar('accuracy', acc)
+                print('Epoch {} Batch {}/{} Loss {:.4f}  acc {:f}'.format(epoch + 1, batch, N_BATCH,
+                                                                          batch_loss.numpy(),
+                                                                          acc))
+            if batch % 100 == 0:
                 for i in range(5):
                     print("real:{:s}  pred:{:s} acc:{:f}".format(ground_truths[i], preds[i],
                                                                  compute_accuracy([ground_truths[i]], [preds[i]])))

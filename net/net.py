@@ -62,16 +62,17 @@ class BahdanauAttention(tf.keras.Model):
         self.V = tf.keras.layers.Dense(1)
 
     def call(self, features, hidden):
-        # features(CNN_encoder output) shape == (batch_size, 64, embedding_dim)
+        # features(CNN_encoder output) shape == (batch_size, 25, embedding_dim)
 
         # hidden shape == (batch_size, hidden_size)
         # hidden_with_time_axis shape == (batch_size, 1, hidden_size)
         hidden_with_time_axis = tf.expand_dims(hidden, 1)
 
-        # score shape == (batch_size, 64, hidden_size)
+        self.W1.input_shape
+        # score shape == (batch_size, 25, hidden_size)
         score = tf.nn.tanh(self.W1(features) + self.W2(hidden_with_time_axis))
 
-        # attention_weights shape == (batch_size, 64, 1)
+        # attention_weights shape == (batch_size, 25, 1)
         # we get 1 at the last axis because we are applying score to self.V
         attention_weights = tf.nn.softmax(self.V(score), axis=1)
 
