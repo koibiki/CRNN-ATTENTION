@@ -1,12 +1,15 @@
-from net.net import *
-import numpy as np
-from tqdm import *
 import os
 import os.path as osp
 import time
 
+from tqdm import *
+
+from config import cfg
+from net.net import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+
 def max_length(tensor):
     return max(len(t) for t in tensor)
 
@@ -16,16 +19,11 @@ class LanguageIndex():
         self.lang = lang
         self.word2idx = {}
         self.idx2word = {}
-        self.vocab = set()
+        self.vocab = cfg.CHAR_VECTOR
 
         self.create_index()
 
     def create_index(self):
-        for phrase in self.lang:
-            self.vocab.update(phrase.split(' '))
-
-        self.vocab = sorted(self.vocab)
-
         self.word2idx['<pad>'] = 0
         for index, word in enumerate(self.vocab):
             self.word2idx[word] = index + 1
@@ -35,6 +33,7 @@ class LanguageIndex():
 
 
 root = "../mnt/ramdisk/max/90kDICT32px"
+
 
 def create_dataset_from_dir(root):
     img_names = os.listdir(root)
@@ -128,6 +127,7 @@ checkpoint = tf.train.Checkpoint(optimizer=optimizer, encoder=encoder, decoder=d
 EPOCHS = 100000
 
 
+
 for epoch in range(EPOCHS):
     start = time.time()
 
@@ -176,17 +176,15 @@ for epoch in range(EPOCHS):
         acc = compute_accuracy(ground_truths, preds)
 
         if batch % 1 == 0:
-            print('Epoch {} Batch {} Loss {:.4f} Mean Loss {:.4f} acc {:f}'.format(epoch + 1, batch,
-                                                                                   batch_loss.numpy(),
-                                                                                   total_loss / (batch + 1),
-                                                                                   acc))
+            print('Epoch {} Batch {}/{} Loss {:.4f} Mean Loss {:.4f} acc {:f}'.format(epoch + 1, batch, N_BATCH,
+                                                                                      batch_loss.numpy(),
+                                                                                      total_loss / (batch + 1),
+                                                                                      acc))
         if batch % 10 == 0:
             for i in range(5):
                 print("real:{:s}  pred:{:s} acc:{:f}".format(ground_truths[i], preds[i],
                                                              compute_accuracy([ground_truths[i]], [preds[i]])))
 
-    # saving (checkpoint) the model every 2 epochs
-    if (epoch + 1) % 2 == 0:
-        checkpoint.save(file_prefix=checkpoint_prefix)
+    checkpoint.save(file_prefix=checkpoint_prefix)
 
     print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
