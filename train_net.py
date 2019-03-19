@@ -186,6 +186,7 @@ with tf.contrib.summary.record_summaries_every_n_global_steps(1):
             acc = compute_accuracy(ground_truths, preds)
 
             tf.contrib.summary.scalar('loss', batch_loss)
+            tf.contrib.summary.scalar('accuracy', acc)
 
             if batch % 1 == 0:
                 print('Epoch {} Batch {}/{} Loss {:.4f} Mean Loss {:.4f} acc {:f}'.format(epoch + 1, batch, N_BATCH,
