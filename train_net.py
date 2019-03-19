@@ -25,14 +25,18 @@ class LanguageIndex():
 
     def create_index(self):
         self.word2idx['<pad>'] = 0
+        self.word2idx['<start>'] = 1
+        self.word2idx['<end>'] = 2
+        self.word2idx[''] = 3
         for index, word in enumerate(self.vocab):
-            self.word2idx[word] = index + 1
+            self.word2idx[word] = index + 4
 
         for word, index in self.word2idx.items():
             self.idx2word[index] = word
 
 
-root = "../mnt/ramdisk/max/90kDICT32px"
+# root = "../mnt/ramdisk/max/90kDICT32px"
+root = "/media/holaverse/aa0e6097-faa0-4d13-810c-db45d9f3bda8/holaverse/work/00ocr/crnn_data/fine_data"
 
 
 def create_dataset_from_dir(root):
@@ -56,8 +60,8 @@ def create_dataset_from_file(root, file_path):
         img_name = img_name.rstrip().strip()
         img_name = img_name.split(" ")[0]
         img_path = root + "/" + img_name
-        if osp.exists(img_path):
-            img_paths.append(img_path)
+        # if osp.exists(img_path):
+        img_paths.append(img_path)
     img_paths = img_paths[:1000000]
     labels = [img_path.split("/")[-1].split("_")[-2] for img_path in tqdm(img_paths, desc="generator label:")]
     return img_paths, labels
@@ -105,7 +109,7 @@ def map_func(img_path_tensor, label_tensor, label):
 dataset = tf.data.Dataset.from_tensor_slices((img_paths_tensor, labels_tensor, labels)) \
     .map(lambda item1, item2, item3: tf.py_func(map_func, [item1, item2, item3], [tf.float32, tf.int32, tf.string]),
          num_parallel_calls=8) \
-    .shuffle(100000, reshuffle_each_iteration=True)
+    .shuffle(1000, reshuffle_each_iteration=True)
 dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
 
 encoder = Encoder(units, BATCH_SIZE)
@@ -126,65 +130,73 @@ checkpoint = tf.train.Checkpoint(optimizer=optimizer, encoder=encoder, decoder=d
 
 EPOCHS = 100000
 
+global_step = tf.train.get_or_create_global_step()
 
+logdir = "./logs/"
+writer = tf.contrib.summary.create_file_writer(logdir)
+writer.set_as_default()
 
-for epoch in range(EPOCHS):
-    start = time.time()
+with tf.contrib.summary.record_summaries_every_n_global_steps(1):
+    for epoch in range(EPOCHS):
+        start = time.time()
 
-    total_loss = 0
+        total_loss = 0
 
-    for (batch, (inp, targ, ground_truths)) in enumerate(dataset):
-        loss = 0
+        for (batch, (inp, targ, ground_truths)) in enumerate(dataset):
+            loss = 0
+            global_step.assign_add(1)
 
-        results = np.zeros((BATCH_SIZE, targ.shape[1] - 1), np.int32)
+            results = np.zeros((BATCH_SIZE, targ.shape[1] - 1), np.int32)
 
-        with tf.GradientTape() as tape:
-            enc_output, enc_hidden = encoder(inp)
+            with tf.GradientTape() as tape:
+                enc_output, enc_hidden = encoder(inp)
 
-            dec_hidden = enc_hidden
+                dec_hidden = enc_hidden
 
-            dec_input = tf.expand_dims([label_lang.word2idx['<start>']] * BATCH_SIZE, 1)
+                dec_input = tf.expand_dims([label_lang.word2idx['<start>']] * BATCH_SIZE, 1)
 
-            # Teacher forcing - feeding the target as the next input
-            for t in range(1, targ.shape[1]):
-                # passing enc_output to the decoder
-                predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
+                # Teacher forcing - feeding the target as the next input
+                for t in range(1, targ.shape[1]):
+                    # passing enc_output to the decoder
+                    predictions, dec_hidden, _ = decoder(dec_input, dec_hidden, enc_output)
 
-                predicted_id = tf.argmax(predictions, axis=-1).numpy()
+                    predicted_id = tf.argmax(predictions, axis=-1).numpy()
 
-                results[:, t - 1] = predicted_id
+                    results[:, t - 1] = predicted_id
 
-                loss += loss_function(targ[:, t], predictions)
+                    loss += loss_function(targ[:, t], predictions)
 
-                # using teacher forcing
-                dec_input = tf.expand_dims(targ[:, t], 1)
+                    # using teacher forcing
+                    dec_input = tf.expand_dims(targ[:, t], 1)
 
-        batch_loss = (loss / int(targ.shape[1]))
+            batch_loss = (loss / int(targ.shape[1]))
 
-        total_loss += batch_loss
+            total_loss += batch_loss
 
-        variables = encoder.variables + decoder.variables
+            variables = encoder.variables + decoder.variables
 
-        gradients = tape.gradient(loss, variables)
+            gradients = tape.gradient(loss, variables)
 
-        optimizer.apply_gradients(zip(gradients, variables))
+            optimizer.apply_gradients(zip(gradients, variables))
 
-        preds = [process_result(result, label_lang) for result in results]
+            preds = [process_result(result, label_lang) for result in results]
 
-        ground_truths = [l.numpy().decode() for l in ground_truths]
+            ground_truths = [l.numpy().decode() for l in ground_truths]
 
-        acc = compute_accuracy(ground_truths, preds)
+            acc = compute_accuracy(ground_truths, preds)
 
-        if batch % 1 == 0:
-            print('Epoch {} Batch {}/{} Loss {:.4f} Mean Loss {:.4f} acc {:f}'.format(epoch + 1, batch, N_BATCH,
-                                                                                      batch_loss.numpy(),
-                                                                                      total_loss / (batch + 1),
-                                                                                      acc))
-        if batch % 10 == 0:
-            for i in range(5):
-                print("real:{:s}  pred:{:s} acc:{:f}".format(ground_truths[i], preds[i],
-                                                             compute_accuracy([ground_truths[i]], [preds[i]])))
+            tf.contrib.summary.scalar('loss', batch_loss)
 
-    checkpoint.save(file_prefix=checkpoint_prefix)
+            if batch % 1 == 0:
+                print('Epoch {} Batch {}/{} Loss {:.4f} Mean Loss {:.4f} acc {:f}'.format(epoch + 1, batch, N_BATCH,
+                                                                                          batch_loss.numpy(),
+                                                                                          total_loss / (batch + 1),
+                                                                                          acc))
+            if batch % 10 == 0:
+                for i in range(5):
+                    print("real:{:s}  pred:{:s} acc:{:f}".format(ground_truths[i], preds[i],
+                                                                 compute_accuracy([ground_truths[i]], [preds[i]])))
 
-    print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+        checkpoint.save(file_prefix=checkpoint_prefix)
+
+        print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
