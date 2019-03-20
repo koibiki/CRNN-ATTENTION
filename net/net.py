@@ -4,8 +4,6 @@ import tensorflow as tf
 
 tf.enable_eager_execution()
 
-from utils.img_utils import *
-
 
 def gru(units):
     if tf.test.is_gpu_available():
@@ -68,7 +66,6 @@ class BahdanauAttention(tf.keras.Model):
         # hidden_with_time_axis shape == (batch_size, 1, hidden_size)
         hidden_with_time_axis = tf.expand_dims(hidden, 1)
 
-        self.W1.input_shape
         # score shape == (batch_size, 25, hidden_size)
         score = tf.nn.tanh(self.W1(features) + self.W2(hidden_with_time_axis))
 

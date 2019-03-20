@@ -6,6 +6,9 @@ from tqdm import *
 
 from config import cfg
 from net.net import *
+import math
+
+from utils.img_utils import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -35,8 +38,7 @@ class LanguageIndex():
             self.idx2word[index] = word
 
 
-# root = "../mnt/ramdisk/max/90kDICT32px"
-root = "/media/holaverse/aa0e6097-faa0-4d13-810c-db45d9f3bda8/holaverse/work/00ocr/crnn_data/fine_data"
+root = "../mnt/ramdisk/max/90kDICT32px"
 
 
 def create_dataset_from_dir(root):
@@ -58,11 +60,11 @@ def create_dataset_from_file(root, file_path):
     img_paths = []
     for img_name in tqdm(readlines, desc="read dir:"):
         img_name = img_name.rstrip().strip()
-        img_name = img_name.split(" ")[0]
-        img_path = root + "/" + img_name
-        # if osp.exists(img_path):
+        if " " in img_name:
+            img_name = img_name.split(" ")[0]
+        img_path = osp.join(root, img_name)
         img_paths.append(img_path)
-    img_paths = img_paths[:10000]
+    img_paths = img_paths[:1000000]
     labels = [img_path.split("/")[-1].split("_")[-2] for img_path in tqdm(img_paths, desc="generator label:")]
     return img_paths, labels
 
@@ -91,7 +93,7 @@ BUFFER_SIZE = len(img_paths_tensor)
 BATCH_SIZE = 64
 N_BATCH = BUFFER_SIZE // BATCH_SIZE
 embedding_dim = 256
-units = 512
+units = 1024
 
 vocab_size = len(label_lang.word2idx)
 
@@ -115,7 +117,12 @@ dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
 encoder = Encoder(units, BATCH_SIZE)
 decoder = Decoder(vocab_size, embedding_dim, units, BATCH_SIZE)
 
-optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+global_step = tf.train.get_or_create_global_step()
+
+start_learning_rate = cfg.LEARNING_RATE
+learning_rate = tf.Variable(start_learning_rate, dtype=tf.float32)
+
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
 
 def loss_function(real, pred):
@@ -128,19 +135,22 @@ checkpoint_dir = './checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 checkpoint = tf.train.Checkpoint(optimizer=optimizer, encoder=encoder, decoder=decoder)
 
-EPOCHS = 100000
+checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
-global_step = tf.train.get_or_create_global_step()
+EPOCHS = 100000
 
 logdir = "./logs/"
 writer = tf.contrib.summary.create_file_writer(logdir)
 writer.set_as_default()
 
-with tf.contrib.summary.record_summaries_every_n_global_steps(10):
+with tf.contrib.summary.record_summaries_every_n_global_steps(1):
     for epoch in range(EPOCHS):
         start = time.time()
 
         total_loss = 0
+
+        lr = max(0.00001, start_learning_rate * math.pow(cfg.LR_DECAY_RATE, epoch))
+        learning_rate.assign(lr)
 
         for (batch, (inp, targ, ground_truths)) in enumerate(dataset):
             loss = 0
@@ -185,9 +195,11 @@ with tf.contrib.summary.record_summaries_every_n_global_steps(10):
 
             acc = compute_accuracy(ground_truths, preds)
 
+            tf.contrib.summary.scalar('loss', batch_loss)
+            tf.contrib.summary.scalar('accuracy', acc)
+            tf.contrib.summary.scalar('lr', learning_rate.numpy())
+
             if batch % 10 == 0:
-                tf.contrib.summary.scalar('loss', batch_loss)
-                tf.contrib.summary.scalar('accuracy', acc)
                 print('Epoch {} Batch {}/{} Loss {:.4f}  acc {:f}'.format(epoch + 1, batch, N_BATCH,
                                                                           batch_loss.numpy(),
                                                                           acc))
