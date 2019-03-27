@@ -5,10 +5,10 @@ from typing import List
 
 def process_img(img_path):
     imread = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    img_resize = resize_image(imread, 100, 32)
-    label = img_path.split("/")[-1].split("_")[-2]
-    return np.array(img_resize, dtype=np.float32), label
-
+    imread = resize_image(imread, 100, 32)
+    imread = np.expand_dims(imread, axis=-1)
+    imread = np.array(imread, np.float32)
+    return imread
 
 def resize_image(image, out_width, out_height):
     """

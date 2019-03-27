@@ -5,6 +5,7 @@ import time
 from tqdm import *
 
 from config import cfg
+from lang_dict.lang import LanguageIndex
 from net.net import *
 import math
 
@@ -17,28 +18,8 @@ def max_length(tensor):
     return max(len(t) for t in tensor)
 
 
-class LanguageIndex():
-    def __init__(self, lang):
-        self.lang = lang
-        self.word2idx = {}
-        self.idx2word = {}
-        self.vocab = cfg.CHAR_VECTOR
-
-        self.create_index()
-
-    def create_index(self):
-        self.word2idx['<pad>'] = 0
-        self.word2idx['<start>'] = 1
-        self.word2idx['<end>'] = 2
-        self.word2idx[''] = 3
-        for index, word in enumerate(self.vocab):
-            self.word2idx[word] = index + 4
-
-        for word, index in self.word2idx.items():
-            self.idx2word[index] = word
-
-
-root = "../mnt/ramdisk/max/90kDICT32px"
+# root = "../mnt/ramdisk/max/90kDICT32px"
+root = "/media/holaverse/aa0e6097-faa0-4d13-810c-db45d9f3bda8/holaverse/work/00ocr/crnn_data/fine_data"
 
 
 def create_dataset_from_dir(root):
@@ -60,9 +41,9 @@ def create_dataset_from_file(root, file_path):
     img_paths = []
     for img_name in tqdm(readlines, desc="read dir:"):
         img_name = img_name.rstrip().strip()
-        if " " in img_name:
-            img_name = img_name.split(" ")[0]
-        img_path = osp.join(root, img_name)
+        img_name = img_name.split(" ")[0]
+        img_path = root + "/" + img_name
+        # if osp.exists(img_path):
         img_paths.append(img_path)
     img_paths = img_paths[:1000000]
     labels = [img_path.split("/")[-1].split("_")[-2] for img_path in tqdm(img_paths, desc="generator label:")]
@@ -76,7 +57,7 @@ def load_dataset(root):
 
     processed_labels = [preprocess_label(label) for label in tqdm(labels, desc="process label:")]
 
-    label_lang = LanguageIndex(label for label in processed_labels)
+    label_lang = LanguageIndex()
 
     labels_tensor = [[label_lang.word2idx[s] for s in label.split(' ')] for label in processed_labels]
 
@@ -89,11 +70,10 @@ def load_dataset(root):
 
 img_paths_tensor, labels_tensor, labels, label_lang, label_max_len = load_dataset(root)
 
-BUFFER_SIZE = len(img_paths_tensor)
-BATCH_SIZE = 64
-N_BATCH = BUFFER_SIZE // BATCH_SIZE
-embedding_dim = 256
-units = 1024
+BATCH_SIZE = cfg.TRAIN_BATCH_SIZE
+N_BATCH = len(img_paths_tensor) // BATCH_SIZE
+embedding_dim = cfg.EMBEDDING_DIM
+units = cfg.UNITS
 
 vocab_size = len(label_lang.word2idx)
 
@@ -143,13 +123,12 @@ logdir = "./logs/"
 writer = tf.contrib.summary.create_file_writer(logdir)
 writer.set_as_default()
 
-with tf.contrib.summary.record_summaries_every_n_global_steps(1):
+with tf.contrib.summary.record_summaries_every_n_global_steps(10):
     for epoch in range(EPOCHS):
         start = time.time()
 
         total_loss = 0
-
-        lr = max(0.00001, start_learning_rate * math.pow(cfg.LR_DECAY_RATE, epoch))
+        lr = max(0.00001, start_learning_rate * math.pow(0.99, epoch))
         learning_rate.assign(lr)
 
         for (batch, (inp, targ, ground_truths)) in enumerate(dataset):
@@ -195,11 +174,10 @@ with tf.contrib.summary.record_summaries_every_n_global_steps(1):
 
             acc = compute_accuracy(ground_truths, preds)
 
-            tf.contrib.summary.scalar('loss', batch_loss)
-            tf.contrib.summary.scalar('accuracy', acc)
-            tf.contrib.summary.scalar('lr', learning_rate.numpy())
-
             if batch % 10 == 0:
+                tf.contrib.summary.scalar('loss', batch_loss)
+                tf.contrib.summary.scalar('accuracy', acc)
+                tf.contrib.summary.scalar('lr', learning_rate.numpy())
                 print('Epoch {} Batch {}/{} Loss {:.4f}  acc {:f}'.format(epoch + 1, batch, N_BATCH,
                                                                           batch_loss.numpy(),
                                                                           acc))
@@ -208,6 +186,6 @@ with tf.contrib.summary.record_summaries_every_n_global_steps(1):
                     print("real:{:s}  pred:{:s} acc:{:f}".format(ground_truths[i], preds[i],
                                                                  compute_accuracy([ground_truths[i]], [preds[i]])))
 
-        checkpoint.save(file_prefix=checkpoint_prefix)
+                checkpoint.save(file_prefix=checkpoint_prefix)
 
         print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
