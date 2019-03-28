@@ -5,6 +5,8 @@ from lang_dict.lang import LanguageIndex
 from net.net import *
 from utils.img_utils import *
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 label_lang = LanguageIndex()
 vocab_size = len(label_lang.word2idx)
 
@@ -14,11 +16,6 @@ units = cfg.UNITS
 
 encoder = Encoder(units, BATCH_SIZE)
 decoder = Decoder(vocab_size, embedding_dim, units, BATCH_SIZE)
-
-global_step = tf.train.get_or_create_global_step()
-
-start_learning_rate = cfg.LEARNING_RATE
-learning_rate = tf.Variable(start_learning_rate, dtype=tf.float32)
 
 checkpoint_dir = './checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -50,7 +47,7 @@ def evaluate(encoder, decoder, img_path, label_lang):
 
     preds = [process_result(result, label_lang) for result in results]
 
-    print("real :" + preds[0])
+    print("pred :" + preds[0])
 
 
 img_path = "./sample/1_bridleway_9530.jpg"
