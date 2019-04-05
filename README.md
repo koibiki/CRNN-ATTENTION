@@ -11,3 +11,6 @@ mjsynth.tar.gz    http://www.robots.ox.ac.uk/~vgg/data/text/
 
 添加attention机制后,模型收敛很快,基本一个epoch就能基本收敛,所以可以考虑直接在CPU上训练测试
 
+目前版本只能用于检测单个单词,对多个单词的情况基本预测全错
+
+
