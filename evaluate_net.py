@@ -5,7 +5,7 @@ from lang_dict.lang import LanguageIndex
 from net.net import *
 from utils.img_utils import *
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 label_lang = LanguageIndex()
 vocab_size = len(label_lang.word2idx)

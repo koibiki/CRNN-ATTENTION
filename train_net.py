@@ -11,15 +11,14 @@ import math
 
 from utils.img_utils import *
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def max_length(tensor):
     return max(len(t) for t in tensor)
 
 
-# root = "../mnt/ramdisk/max/90kDICT32px"
-root = "/media/holaverse/aa0e6097-faa0-4d13-810c-db45d9f3bda8/holaverse/work/00ocr/crnn_data/fine_data"
+root = "../mnt/ramdisk/max/90kDICT32px"
 
 
 def create_dataset_from_dir(root):
@@ -35,7 +34,7 @@ def create_dataset_from_dir(root):
 
 
 def create_dataset_from_file(root, file_path):
-    with open(file_path, "r") as f:
+    with open(osp.join(root, file_path), "r") as f:
         readlines = f.readlines()
 
     img_paths = []
@@ -51,7 +50,7 @@ def create_dataset_from_file(root, file_path):
 
 
 def load_dataset(root):
-    img_paths_tensor, labels = create_dataset_from_file(root, root + "/annotation_train.txt")
+    img_paths_tensor, labels = create_dataset_from_file(root, "annotation_train.txt")
 
     labels = [label for label in labels]
 
@@ -174,10 +173,12 @@ with tf.contrib.summary.record_summaries_every_n_global_steps(10):
 
             acc = compute_accuracy(ground_truths, preds)
 
+            tf.contrib.summary.scalar('loss', batch_loss)
+            tf.contrib.summary.scalar('accuracy', acc)
+            tf.contrib.summary.scalar('lr', learning_rate.numpy())
+            writer.flush()
+
             if batch % 10 == 0:
-                tf.contrib.summary.scalar('loss', batch_loss)
-                tf.contrib.summary.scalar('accuracy', acc)
-                tf.contrib.summary.scalar('lr', learning_rate.numpy())
                 print('Epoch {} Batch {}/{} Loss {:.4f}  acc {:f}'.format(epoch + 1, batch, N_BATCH,
                                                                           batch_loss.numpy(),
                                                                           acc))
